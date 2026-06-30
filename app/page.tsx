@@ -3,7 +3,7 @@
 import { useState, useRef } from 'react';
 import { UploadCloud, Shirt, Loader2, Sparkles, Download } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import * as fal from '@fal-ai/client'; // <-- Profesyonel altyapımız
+import { fal } from '@fal-ai/client';
 
 // Fal.ai kimliğimizi sisteme tanıtıyoruz
 // Some versions of @fal-ai/client may not export a `config` function.
