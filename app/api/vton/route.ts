@@ -13,9 +13,7 @@ export async function POST(req: Request) {
     const hfToken = process.env.HF_TOKEN;
 
     // Modele bağlanırken token'ı kimlik olarak sunuyoruz
-    const hfClient = await client("Nymbo/Virtual-Try-On", {
-      hf_token: hfToken
-    } as any);
+    const hfClient = await client("Nymbo/Virtual-Try-On", { hf_token: hfToken } as any);
 
     const result = await hfClient.predict("/tryon", [
       handle_file(personImage),   
