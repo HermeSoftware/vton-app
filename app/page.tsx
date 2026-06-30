@@ -55,14 +55,19 @@ export default function Home() {
     }
   };
 
-  // VERCEL ENGELİNİ AŞAN YENİ YAPAY ZEKA FONKSİYONU
+ // VERCEL ENGELİNİ AŞAN VE KİMLİKLİ YAPAY ZEKA FONKSİYONU
   const handleGenerate = async () => {
     if (!personImage || !garmentImage) return;
     
     setIsGenerating(true);
     try {
-      // Doğrudan kullanıcının tarayıcısı üzerinden bağlanıyoruz (Süre sınırı yok!)
-      const hfClient = await client("Nymbo/Virtual-Try-On");
+      // 1. Token'ımızı tarayıcıya çağırıyoruz
+      const hfToken = process.env.NEXT_PUBLIC_HF_TOKEN;
+
+      // 2. Orijinal ve güçlü "yisol" modeline kimliğimizle bağlanıyoruz
+      const hfClient = await client("yisol/IDM-VTON", {
+        ...(hfToken ? { hf_token: hfToken } : {}),
+      } as any);
       
       const result = await hfClient.predict("/tryon", [
         handle_file(personImage),   
@@ -82,7 +87,7 @@ export default function Home() {
       
     } catch (error) {
       console.error("AI Hatası:", error);
-      alert('Hugging Face sunucusu şu an çok yoğun. Lütfen 1-2 dakika sonra tekrar deneyin.');
+      alert('Hugging Face sunucusu yoğun olabilir. Lütfen 30 saniye bekleyip tekrar "Üzerimde Göster" butonuna basın.');
     } finally {
       setIsGenerating(false);
     }
