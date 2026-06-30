@@ -1,16 +1,17 @@
 "use client";
 
 import { useState, useRef } from 'react';
-import { UploadCloud, Shirt, Loader2, Sparkles } from 'lucide-react';
-import { supabase } from '@/lib/supabase'; // Veya './lib/supabase' hangisi çalışıyorsa
+import { UploadCloud, Shirt, Loader2, Sparkles, Download } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import { client, handle_file } from '@gradio/client'; // <-- Yapay zekayı Vercel'den değil, tarayıcıdan çağırıyoruz
 
 export default function Home() {
   const [personImage, setPersonImage] = useState<string | null>(null);
   const [garmentImage, setGarmentImage] = useState<string | null>(null);
-  const [resultImage, setResultImage] = useState<string | null>(null); // Sonuç resmi için
+  const [resultImage, setResultImage] = useState<string | null>(null);
   
   const [isUploading, setIsUploading] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false); // Yapay zeka yüklemesi için
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const personInputRef = useRef<HTMLInputElement>(null);
   const garmentInputRef = useRef<HTMLInputElement>(null);
@@ -39,7 +40,7 @@ export default function Home() {
       const url = await uploadToSupabase(e.target.files[0], 'person');
       if (url) {
         setPersonImage(url);
-        setResultImage(null); // Yeni resim yüklenirse eski sonucu temizle
+        setResultImage(null);
       }
     }
   };
@@ -54,29 +55,55 @@ export default function Home() {
     }
   };
 
-  // Yapay Zekayı Tetikleyen Fonksiyon
+  // VERCEL ENGELİNİ AŞAN YENİ YAPAY ZEKA FONKSİYONU
   const handleGenerate = async () => {
+    if (!personImage || !garmentImage) return;
+    
     setIsGenerating(true);
     try {
-      const response = await fetch('/api/vton', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ personImage, garmentImage })
-      });
+      // Doğrudan kullanıcının tarayıcısı üzerinden bağlanıyoruz (Süre sınırı yok!)
+      const hfClient = await client("Nymbo/Virtual-Try-On");
       
-      const data = await response.json();
+      const result = await hfClient.predict("/tryon", [
+        handle_file(personImage),   
+        handle_file(garmentImage),  
+        "a photo of a person wearing the garment, high quality, photorealistic", 
+        true,  
+        true,  
+        30,    
+        42     
+      ]);
+
+      // @ts-ignore
+      const outputUrl = result.data[0].url;
+      setResultImage(outputUrl);
       
-      if (data.success) {
-        setResultImage(data.resultImage);
-        // Sayfayı yavaşça aşağı kaydır
-        setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 500);
-      } else {
-        alert('Hata: ' + data.error);
-      }
+      setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 500);
+      
     } catch (error) {
-      alert('Beklenmeyen bir ağ hatası oluştu.');
+      console.error("AI Hatası:", error);
+      alert('Hugging Face sunucusu şu an çok yoğun. Lütfen 1-2 dakika sonra tekrar deneyin.');
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!resultImage) return;
+    try {
+      const response = await fetch(resultImage);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `vton-sonuc-${Date.now()}.jpg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('İndirme hatası:', error);
+      alert('Resim indirilirken bir sorun oluştu.');
     }
   };
 
@@ -90,7 +117,6 @@ export default function Home() {
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* İnsan Fotoğrafı Kutusu */}
           <div onClick={() => personInputRef.current?.click()} className="bg-white p-2 rounded-[2rem] shadow-sm border border-gray-200 flex flex-col items-center justify-center text-center hover:border-black transition-all cursor-pointer min-h-[320px] relative">
             <input type="file" accept="image/*" className="hidden" ref={personInputRef} onChange={handlePersonUpload} disabled={isUploading || isGenerating} />
             {personImage ? (
@@ -103,7 +129,6 @@ export default function Home() {
             )}
           </div>
 
-          {/* Kıyafet Fotoğrafı Kutusu */}
           <div onClick={() => garmentInputRef.current?.click()} className="bg-white p-2 rounded-[2rem] shadow-sm border border-gray-200 flex flex-col items-center justify-center text-center hover:border-black transition-all cursor-pointer min-h-[320px] relative">
             <input type="file" accept="image/*" className="hidden" ref={garmentInputRef} onChange={handleGarmentUpload} disabled={isUploading || isGenerating} />
             {garmentImage ? (
@@ -117,7 +142,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Aksiyon Butonu */}
         <div className="mt-10 flex flex-col items-center">
           {isUploading && <div className="text-gray-500 mb-4 animate-pulse">Resimler yükleniyor...</div>}
           
@@ -127,18 +151,24 @@ export default function Home() {
             className="bg-black text-white px-10 py-4 rounded-full font-bold text-lg hover:bg-gray-800 disabled:bg-gray-300 transition-colors shadow-lg flex items-center gap-2"
           >
             {isGenerating ? (
-              <><Loader2 className="w-5 h-5 animate-spin" /> Yapay Zeka İşliyor (30-60sn sürebilir)...</>
+              <><Loader2 className="w-5 h-5 animate-spin" /> Yapay Zeka İşliyor (30-60sn)...</>
             ) : (
               <><Sparkles className="w-5 h-5" /> Üzerimde Göster</>
             )}
           </button>
         </div>
 
-        {/* Sonuç Gösterim Alanı */}
         {resultImage && (
-          <div className="mt-16 bg-white p-4 rounded-[2rem] shadow-xl border border-gray-200 animate-in fade-in slide-in-from-bottom-8 duration-700">
-            <h2 className="text-3xl font-black text-center mb-6 mt-4">İşte Sonuç</h2>
-            <img src={resultImage} alt="VTON Sonuç" className="w-full h-auto rounded-[1.5rem]" />
+          <div className="mt-16 bg-white p-6 rounded-[2rem] shadow-xl border border-gray-200 animate-in fade-in slide-in-from-bottom-8 duration-700 flex flex-col items-center">
+            <h2 className="text-3xl font-black text-center mb-6 mt-2">İşte Sonuç</h2>
+            <img src={resultImage} alt="VTON Sonuç" className="w-full max-w-2xl h-auto rounded-[1.5rem] shadow-sm mb-6" />
+            
+            <button 
+              onClick={handleDownload}
+              className="bg-gray-100 text-gray-900 px-8 py-3 rounded-full font-bold text-md hover:bg-gray-200 transition-colors border border-gray-300 shadow-sm flex items-center gap-2"
+            >
+              <Download className="w-5 h-5" /> Sonucu İndir
+            </button>
           </div>
         )}
 
