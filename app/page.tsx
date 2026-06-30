@@ -3,7 +3,16 @@
 import { useState, useRef } from 'react';
 import { UploadCloud, Shirt, Loader2, Sparkles, Download } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { client, handle_file } from '@gradio/client'; // <-- Yapay zekayı Vercel'den değil, tarayıcıdan çağırıyoruz
+import * as fal from '@fal-ai/client'; // <-- Profesyonel altyapımız
+
+// Fal.ai kimliğimizi sisteme tanıtıyoruz
+// Some versions of @fal-ai/client may not export a `config` function.
+// Guard the call to avoid TypeScript errors at build time.
+if ((fal as any)?.config) {
+  (fal as any).config({
+    credentials: process.env.NEXT_PUBLIC_FAL_KEY,
+  });
+}
 
 export default function Home() {
   const [personImage, setPersonImage] = useState<string | null>(null);
@@ -55,39 +64,33 @@ export default function Home() {
     }
   };
 
- // VERCEL ENGELİNİ AŞAN VE KİMLİKLİ YAPAY ZEKA FONKSİYONU
+  // FAL.AI İLE KESİNTİSİZ ÜRETİM FONKSİYONU
   const handleGenerate = async () => {
     if (!personImage || !garmentImage) return;
     
     setIsGenerating(true);
     try {
-      // 1. Token'ımızı tarayıcıya çağırıyoruz
-      const hfToken = process.env.NEXT_PUBLIC_HF_TOKEN;
+      // Doğrudan Fal.ai sunucularına canlı tünel açıyoruz
+      const result: any = await (fal as any).subscribe("fal-ai/idm-vton", {
+        input: {
+          human_image_url: personImage,
+          garment_image_url: garmentImage,
+          description: "high quality, photorealistic"
+        }
+      });
 
-      // 2. Orijinal ve güçlü "yisol" modeline kimliğimizle bağlanıyoruz
-      const hfClient = await client("yisol/IDM-VTON", {
-        ...(hfToken ? { hf_token: hfToken } : {}),
-      } as any);
-      
-      const result = await hfClient.predict("/tryon", [
-        handle_file(personImage),   
-        handle_file(garmentImage),  
-        "a photo of a person wearing the garment, high quality, photorealistic", 
-        true,  
-        true,  
-        30,    
-        42     
-      ]);
-
-      // @ts-ignore
-      const outputUrl = result.data[0].url;
-      setResultImage(outputUrl);
-      
-      setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 500);
+      // Dönen sonucu alıp ekrana basıyoruz
+      const finalImageUrl = result?.image?.url || result?.image;
+      if (finalImageUrl) {
+        setResultImage(finalImageUrl);
+        setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 500);
+      } else {
+        throw new Error("Resim URL'si çözümlenemedi.");
+      }
       
     } catch (error) {
       console.error("AI Hatası:", error);
-      alert('Hugging Face sunucusu yoğun olabilir. Lütfen 30 saniye bekleyip tekrar "Üzerimde Göster" butonuna basın.');
+      alert('Yapay zeka sunucusuyla bağlantı kurulamadı. API anahtarınızı kontrol edin.');
     } finally {
       setIsGenerating(false);
     }
@@ -156,7 +159,7 @@ export default function Home() {
             className="bg-black text-white px-10 py-4 rounded-full font-bold text-lg hover:bg-gray-800 disabled:bg-gray-300 transition-colors shadow-lg flex items-center gap-2"
           >
             {isGenerating ? (
-              <><Loader2 className="w-5 h-5 animate-spin" /> Yapay Zeka İşliyor (30-60sn)...</>
+              <><Loader2 className="w-5 h-5 animate-spin" /> Yapay Zeka İşliyor (10sn)...</>
             ) : (
               <><Sparkles className="w-5 h-5" /> Üzerimde Göster</>
             )}
